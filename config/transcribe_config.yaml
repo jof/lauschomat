@@ -1,0 +1,20 @@
+# GPU Server transcription configuration
+app:
+  data_root: /var/lib/lauschomat  # base directory for audio, logs, indices
+  incoming_dir: /var/lib/lauschomat/incoming
+  processed_dir: /var/lib/lauschomat/processed
+  timezone: UTC
+  node_id: gpu-server-001
+
+transcription:
+  enabled: true
+  engine: nemo_parakeet_tdt
+  model_name: nvidia/parakeet-ctc-1.1b  # example; confirm exact checkpoint
+  device: cuda:0            # For L40S GPU
+  batch_size: 1
+  language: en-US
+  diarization: false         # usually single-speaker transmissions
+
+storage:
+  index_format: jsonl        # jsonl for append-only indices
+  partitioning: by_day       # by_day | by_hour

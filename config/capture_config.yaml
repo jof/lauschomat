@@ -1,0 +1,37 @@
+# Capture configuration for Raspberry Pi or local development
+app:
+  data_root: /var/lib/lauschomat  # base directory for audio, logs, indices
+  tmp_dir: /var/tmp/lauschomat
+  timezone: UTC
+  node_id: pi-capture-001
+
+audio:
+  backend: pulse           # Using PulseAudio as specified
+  device_name: default     # PulseAudio device name
+  channels: 1
+  sample_rate: 16000       # Parakeet supports a range; we can resample as needed
+  format: S16_LE
+  gain_db: 0               # optional software gain
+
+squelch:
+  method: energy_hysteresis  # energy_hysteresis | webrtc_vad | rnnoise
+  frame_ms: 20
+  threshold_open: -35        # dBFS; open threshold
+  threshold_close: -45       # dBFS; close threshold
+  min_open_ms: 80            # min consecutive ms above open to start
+  hang_ms: 800               # keep recording after signal dips
+  max_transmission_ms: 180000  # safety cutoff
+
+recording:
+  codec: wav                 # Using WAV as specified
+  container: wav
+  include_pre_roll_ms: 200   # prepend buffered audio before open edge
+  include_post_roll_ms: 300
+  filename_template: "{date}/{timestamp}_{seq}.{ext}"
+
+transfer:
+  method: remote_fs          # remote_fs | rsync | scp | custom
+  target_host: gpu-server.local
+  target_path: /var/lib/lauschomat/incoming
+  ssh_key_path: ~/.ssh/id_ed25519
+  transfer_interval_sec: 10  # How often to check for and transfer new files

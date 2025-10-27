@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/wavesurfer.js@6.6.3/dist/wavesurfer.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Lauschomat</h1>
+            <div class="date-selector">
+                <label for="date-select">Date:</label>
+                <select id="date-select"></select>
+            </div>
+        </header>
+
+        <main>
+            <div class="transmissions-container">
+                <h2>Transmissions</h2>
+                <div class="transmissions-list" id="transmissions-list">
+                    <div class="loading">Loading...</div>
+                </div>
+                <div class="pagination">
+                    <button id="prev-page" disabled>Previous</button>
+                    <span id="page-info">Page 1</span>
+                    <button id="next-page">Next</button>
+                </div>
+            </div>
+
+            <div class="transmission-detail" id="transmission-detail">
+                <h2>Transmission Details</h2>
+                <div class="no-selection">Select a transmission to view details</div>
+                
+                <div class="detail-content" style="display: none;">
+                    <div class="metadata">
+                        <div class="metadata-item">
+                            <span class="label">ID:</span>
+                            <span class="value" id="detail-id"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <span class="label">Time:</span>
+                            <span class="value" id="detail-time"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <span class="label">Duration:</span>
+                            <span class="value" id="detail-duration"></span>
+                        </div>
+                        <div class="metadata-item">
+                            <span class="label">Device:</span>
+                            <span class="value" id="detail-device"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="audio-player">
+                        <div id="waveform"></div>
+                        <div class="controls">
+                            <button id="play-btn">Play</button>
+                            <button id="stop-btn">Stop</button>
+                        </div>
+                    </div>
+                    
+                    <div class="transcription">
+                        <h3>Transcription</h3>
+                        <div class="transcription-text" id="transcription-text">
+                            <div class="loading">Loading transcription...</div>
+                        </div>
+                        <div class="transcription-metadata">
+                            <div class="metadata-item">
+                                <span class="label">Model:</span>
+                                <span class="value" id="transcription-model"></span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="label">Confidence:</span>
+                                <span class="value" id="transcription-confidence"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Lauschomat &copy; 2025</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

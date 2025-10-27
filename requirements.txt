@@ -1,0 +1,28 @@
+# Core dependencies
+numpy>=1.20.0
+scipy>=1.7.0
+pydantic>=1.8.2,<2.0.0
+pyyaml>=6.0
+soundfile>=0.10.3
+sounddevice>=0.4.3
+webrtcvad>=2.0.10
+
+# Audio processing
+librosa>=0.9.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# NVIDIA NeMo for Parakeet TDT
+# Note: NeMo has specific CUDA requirements, ensure compatibility with your system
+nemo_toolkit[asr]>=1.20.0
+
+# Web dependencies
+fastapi>=0.95.0
+uvicorn>=0.22.0
+jinja2>=3.1.2
+aiofiles>=23.1.0
+
+# Development dependencies
+pytest>=7.3.1
+black>=23.3.0
+isort>=5.12.0

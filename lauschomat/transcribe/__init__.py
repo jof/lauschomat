@@ -1,0 +1,3 @@
+"""
+Transcription module for Lauschomat.
+"""

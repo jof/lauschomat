@@ -1,0 +1,11 @@
+# Web visualization configuration
+app:
+  data_root: /var/lib/lauschomat  # base directory where audio/transcripts are stored
+
+web:
+  enabled: true
+  bind_host: 0.0.0.0
+  port: 8080
+  base_path: /
+  static_dir: /var/lib/lauschomat/web/static
+  template_dir: /var/lib/lauschomat/web/templates

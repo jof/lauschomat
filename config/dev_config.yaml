@@ -1,0 +1,48 @@
+# Local development configuration
+app:
+  mode: development          # development | production
+  data_root: ./data         # Local development data directory
+  tmp_dir: ./tmp
+  timezone: UTC
+
+audio:
+  backend: pulse
+  device_name: "USB Audio Device: - (hw:5,0)"
+  # device_name: "USB Audio Device: - (hw:1,0)"
+  channels: 1
+  sample_rate: 44100
+  format: S16_LE
+  gain_db: 0
+
+squelch:
+  method: energy_hysteresis
+  frame_ms: 20
+  threshold_open: -45    # Sensitive threshold to detect audio
+  threshold_close: -80   # Lower close threshold to keep squelch open longer
+  min_open_ms: 15        # Short minimum open time for quick response
+  hang_ms: 250          # Much longer hang time to capture full transmissions
+  max_transmission_ms: 180000
+
+recording:
+  codec: wav
+  container: wav
+  include_pre_roll_ms: 500   # Increased from 200ms to capture more audio before squelch opens
+  include_post_roll_ms: 1000  # Increased from 300ms to capture more audio after squelch closes
+  filename_template: "{date}/{timestamp}_{seq}.{ext}"
+
+transcription:
+  enabled: true
+  engine: nemo_parakeet_tdt
+  model_name: nvidia/parakeet-ctc-1.1b
+  device: cuda:0            # Falls back to CPU if GPU unavailable
+  batch_size: 1
+  language: en-US
+  diarization: false
+
+web:
+  enabled: true
+  bind_host: 127.0.0.1      # Local only by default
+  port: 8080
+  base_path: /
+  static_dir: ./data/web/static
+  template_dir: ./data/web/templates

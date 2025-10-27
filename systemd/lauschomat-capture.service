@@ -1,0 +1,28 @@
+[Unit]
+Description=Lauschomat Audio Capture Service
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lauschomat
+Group=audio
+ExecStart=/usr/bin/python3 -m lauschomat.capture.main --config /etc/lauschomat/capture_config.yaml
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/lib/lauschomat
+Environment=PYTHONUNBUFFERED=1
+
+# Hardening
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+[Unit]
+Description=Lauschomat Transcription Service
+After=network-online.target nvidia-persistenced.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lauschomat
+Group=lauschomat
+ExecStart=/usr/bin/python3 -m lauschomat.transcribe.main --config /etc/lauschomat/transcribe_config.yaml
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/lib/lauschomat
+Environment=PYTHONUNBUFFERED=1
+Environment=CUDA_VISIBLE_DEVICES=0
+
+# Hardening
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target
