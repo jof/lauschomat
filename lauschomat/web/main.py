@@ -30,28 +30,28 @@ def main():
     parser = argparse.ArgumentParser(description="Lauschomat Web Visualization")
     parser.add_argument("--config", type=str, help="Path to configuration file")
     args = parser.parse_args()
-    
+
     # Load configuration
     try:
         config = load_config(args.config)
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
         sys.exit(1)
-    
+
     # Configure file logging
     log_dir = Path(config.app.data_root) / "logs"
     os.makedirs(log_dir, exist_ok=True)
     file_handler = logging.FileHandler(log_dir / "web.log")
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(file_handler)
-    
+
     # Create web server
     try:
         server = WebServer(config)
     except Exception as e:
         logger.error(f"Failed to create web server: {e}")
         sys.exit(1)
-    
+
     # Run server directly (not in a thread)
     try:
         logger.info(f"Starting web server at http://{config.web.bind_host}:{config.web.port}")

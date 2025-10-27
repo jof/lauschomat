@@ -19,23 +19,23 @@ def generate_tone(frequency=1000, duration=0.5, amplitude=0.5, sample_rate=16000
     """Generate a sine wave tone."""
     t = np.linspace(0, duration, int(duration * sample_rate), False)
     tone = amplitude * np.sin(2 * np.pi * frequency * t)
-    
+
     # Apply a simple envelope to avoid clicks
     envelope = np.ones_like(tone)
     attack_samples = int(0.01 * sample_rate)
     release_samples = int(0.01 * sample_rate)
     envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
     envelope[-release_samples:] = np.linspace(1, 0, release_samples)
-    
+
     return (tone * envelope).astype(np.float32)
 
 def play_tone_sequence(frequency=1000, duration=0.5, gap=0.5, count=3, amplitude=0.5, sample_rate=16000):
     """Play a sequence of tones with gaps."""
     print(f"Playing {count} tones at {frequency} Hz with {gap}s gaps...")
-    
+
     # Create the tone
     tone = generate_tone(frequency, duration, amplitude, sample_rate)
-    
+
     # Play the sequence
     for i in range(count):
         print(f"Playing tone {i+1}/{count}...")
@@ -44,7 +44,7 @@ def play_tone_sequence(frequency=1000, duration=0.5, gap=0.5, count=3, amplitude
         if i < count - 1:
             print(f"Waiting {gap}s...")
             time.sleep(gap)
-    
+
     print("Done!")
 
 def main():
@@ -56,9 +56,9 @@ def main():
     parser.add_argument("--count", type=int, default=3, help="Number of tones to play")
     parser.add_argument("--amplitude", type=float, default=0.5, help="Tone amplitude (0-1)")
     parser.add_argument("--sample-rate", type=int, default=16000, help="Sample rate in Hz")
-    
+
     args = parser.parse_args()
-    
+
     try:
         play_tone_sequence(
             frequency=args.frequency,

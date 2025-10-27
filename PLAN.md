@@ -27,7 +27,7 @@ flowchart LR
     C -->|WAV files| D[Local Storage]
     D --> E[Network Transfer]
   end
-  
+
   subgraph "NVIDIA GPU Server"
     E -->|WAV files| F[Incoming Queue]
     F --> G[Transcription Worker]

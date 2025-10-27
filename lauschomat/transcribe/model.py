@@ -17,21 +17,21 @@ logger = logging.getLogger(__name__)
 
 class TranscriptionModel(ABC):
     """Abstract base class for transcription models."""
-    
+
     def __init__(self, config: TranscriptionConfig):
         """Initialize transcription model."""
         self.config = config
-    
+
     @abstractmethod
     def initialize(self) -> bool:
         """Initialize the model. Returns success status."""
         pass
-    
+
     @abstractmethod
     def transcribe(self, audio_path: Union[str, Path]) -> Optional[Dict]:
         """Transcribe audio file. Returns transcription result or None on failure."""
         pass
-    
+
     @abstractmethod
     def cleanup(self) -> None:
         """Clean up resources."""
@@ -40,34 +40,34 @@ class TranscriptionModel(ABC):
 
 class DummyTranscriptionModel(TranscriptionModel):
     """Dummy transcription model for testing."""
-    
+
     def __init__(self, config: TranscriptionConfig):
         """Initialize dummy model."""
         super().__init__(config)
         self.initialized = False
-    
+
     def initialize(self) -> bool:
         """Initialize the model."""
         logger.info("Initializing dummy transcription model")
         self.initialized = True
         return True
-    
+
     def transcribe(self, audio_path: Union[str, Path]) -> Optional[Dict]:
         """Transcribe audio file with dummy output."""
         if not self.initialized:
             logger.error("Model not initialized")
             return None
-        
+
         audio_path = Path(audio_path)
         if not audio_path.exists():
             logger.error(f"Audio file not found: {audio_path}")
             return None
-        
+
         try:
             # Get audio duration
             with sf.SoundFile(audio_path) as f:
                 duration_sec = len(f) / f.samplerate
-            
+
             # Create dummy transcription
             result = {
                 "model": "dummy_model",
@@ -84,15 +84,15 @@ class DummyTranscriptionModel(TranscriptionModel):
                 "latency_ms": int(duration_sec * 100),  # Simulate processing time
                 "runtime_device": "cpu"
             }
-            
+
             # Simulate processing time
             time.sleep(min(0.5, duration_sec * 0.1))
-            
+
             return result
         except Exception as e:
             logger.error(f"Error transcribing {audio_path}: {e}")
             return None
-    
+
     def cleanup(self) -> None:
         """Clean up resources."""
         logger.info("Cleaning up dummy transcription model")
@@ -101,7 +101,7 @@ class DummyTranscriptionModel(TranscriptionModel):
 
 class ParakeetTDTModel(TranscriptionModel):
     """NVIDIA Parakeet TDT model wrapper."""
-    
+
     def __init__(self, config: TranscriptionConfig):
         """Initialize Parakeet TDT model."""
         super().__init__(config)
@@ -112,21 +112,21 @@ class ParakeetTDTModel(TranscriptionModel):
         self.batch_size = config.batch_size
         self.language = config.language
         self.sample_rate = 16000  # Parakeet TDT expects 16kHz audio
-        
+
     def initialize(self) -> bool:
         """Initialize the model."""
         logger.info(f"Initializing Parakeet TDT model '{self.model_name}' on device {self.device}")
-        
+
         try:
             # Import NeMo ASR module
             import torch
             import nemo.collections.asr as nemo_asr
-            
+
             # Set device
             if self.device.startswith('cuda') and not torch.cuda.is_available():
                 logger.warning("CUDA requested but not available, falling back to CPU")
                 self.device = 'cpu'
-            
+
             # Load the Parakeet TDT model
             # The model_name should be one of the available pretrained models in NeMo
             # or a path to a .nemo file
@@ -139,10 +139,10 @@ class ParakeetTDTModel(TranscriptionModel):
                 )
             except Exception as e:
                 raise ValueError(f"Model {self.model_name} not found as pretrained: {e}")
-            
+
             # Set model to evaluation mode
             self.model.eval()
-            
+
             # Get model metadata
             self.model_metadata = {
                 "name": self.model_name,
@@ -151,7 +151,7 @@ class ParakeetTDTModel(TranscriptionModel):
                 "device": self.device,
                 "language": self.language
             }
-            
+
             logger.info(f"Parakeet TDT model loaded successfully: {self.model_metadata}")
             self.initialized = True
             return True
@@ -161,41 +161,41 @@ class ParakeetTDTModel(TranscriptionModel):
         except Exception as e:
             logger.error(f"Failed to initialize Parakeet TDT model: {e}")
             return False
-    
+
     def _preprocess_audio(self, audio_path: Path) -> Optional[torch.Tensor]:
         """Preprocess audio file for Parakeet TDT model."""
         try:
             import torch
             import torchaudio
-            
+
             # Load audio file
             logger.debug(f"Loading audio file: {audio_path}")
-            
+
             # Use torchaudio for loading
             waveform, sample_rate = torchaudio.load(audio_path)
             logger.debug(f"Original waveform shape: {waveform.shape}, sample_rate: {sample_rate}")
-            
+
             # Convert to mono if needed
             if waveform.shape[0] > 1:
                 waveform = torch.mean(waveform, dim=0, keepdim=True)
                 logger.debug(f"After mono conversion: {waveform.shape}")
-            
+
             # Resample if needed
             if sample_rate != self.sample_rate:
                 logger.debug(f"Resampling from {sample_rate} to {self.sample_rate}")
                 resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
                 waveform = resampler(waveform)
                 logger.debug(f"After resampling: {waveform.shape}")
-            
+
             # Normalize audio (important for model performance)
             waveform = waveform / (torch.max(torch.abs(waveform)) + 1e-8)  # Add small epsilon to avoid division by zero
-            
+
             # CRITICAL: Ensure the shape is exactly [batch_size, time_steps] = [1, time]
             # The NeMo model expects shape [batch, time] without any channel dimension
-            
+
             # Log original shape for debugging
             logger.debug(f"Processing waveform with shape: {waveform.shape}")
-            
+
             # First, ensure we have a 2D tensor
             if waveform.dim() == 1:  # [time]
                 waveform = waveform.unsqueeze(0)  # Now [1, time]
@@ -203,7 +203,7 @@ class ParakeetTDTModel(TranscriptionModel):
                 # This is the problematic case - we need to remove the channel dimension
                 waveform = waveform.squeeze(1)  # Remove channel dimension to get [batch, time]
                 logger.debug(f"Removed channel dimension, new shape: {waveform.shape}")
-            
+
             # Now we should have a 2D tensor [channels/batch, time]
             if waveform.dim() == 2:
                 if waveform.shape[0] > 1:  # Multiple channels
@@ -215,7 +215,7 @@ class ParakeetTDTModel(TranscriptionModel):
                 logger.warning(f"Unexpected waveform dimensions: {waveform.shape}, forcing reshape...")
                 # Force reshape to [1, time]
                 waveform = waveform.reshape(1, -1)
-            
+
             # Final verification
             if waveform.dim() != 2 or waveform.shape[0] != 1:
                 logger.warning(f"Final shape check failed: {waveform.shape}, forcing correction...")
@@ -226,7 +226,7 @@ class ParakeetTDTModel(TranscriptionModel):
                     # Try to reshape completely
                     total_elements = waveform.numel()
                     waveform = waveform.reshape(1, total_elements)
-            
+
             logger.debug(f"Final waveform shape: {waveform.shape}")
             return waveform
         except Exception as e:
@@ -234,38 +234,38 @@ class ParakeetTDTModel(TranscriptionModel):
             import traceback
             logger.error(traceback.format_exc())
             return None
-    
+
     def _extract_word_timestamps(self, hypotheses) -> list:
         """Extract word-level timestamps from model output."""
         try:
             # This implementation depends on the specific model output format
             words = []
-            
+
             # Log the type of hypotheses to help debug
             logger.debug(f"Hypotheses type: {type(hypotheses)}")
             if isinstance(hypotheses, list):
                 logger.debug(f"First hypothesis type: {type(hypotheses[0])}")
                 if hasattr(hypotheses[0], '__dict__'):
                     logger.debug(f"Hypothesis attributes: {hypotheses[0].__dict__.keys()}")
-            
+
             # Handle different types of model outputs
             if isinstance(hypotheses, list) and hasattr(hypotheses[0], 'timestep'):
                 # CTC model with timestep information
                 logger.debug("Using timestep information from CTC model")
                 text = str(hypotheses[0])
                 words_list = text.split()
-                
+
                 # Extract timesteps if available
                 if hasattr(hypotheses[0], 'timestep') and hypotheses[0].timestep:
                     timesteps = hypotheses[0].timestep
                     logger.debug(f"Found {len(timesteps)} timesteps")
-                    
+
                     # Process timesteps into word timestamps
                     # This is model-specific and may need adjustment
                     word_idx = 0
                     current_word = ""
                     word_start = 0
-                    
+
                     for i, (char, time) in enumerate(zip(text, timesteps)):
                         if char == " ":
                             if current_word and word_idx < len(words_list):
@@ -282,7 +282,7 @@ class ParakeetTDTModel(TranscriptionModel):
                             if not current_word:  # Start of a new word
                                 word_start = time
                             current_word += char
-                    
+
                     # Add the last word if any
                     if current_word and word_idx < len(words_list):
                         words.append({
@@ -311,27 +311,27 @@ class ParakeetTDTModel(TranscriptionModel):
                 logger.debug("No word timestamps available, using estimation")
                 text = hypotheses[0].text if hasattr(hypotheses[0], 'text') else str(hypotheses[0])
                 return self._estimate_word_timestamps(text)
-            
+
             return words
         except Exception as e:
             logger.error(f"Error extracting word timestamps: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return []
-    
+
     def _estimate_word_timestamps(self, text: str) -> list:
         """Estimate word timestamps based on character counts."""
         if not text:
             return []
-            
+
         # Simple estimation based on character count
         words_list = text.split()
         total_chars = sum(len(word) for word in words_list)
-        
+
         # Estimate duration based on average speaking rate
         # Assuming ~5 characters per second as a rough estimate
         estimated_duration = total_chars / 5.0
-        
+
         # Distribute words evenly across the estimated duration
         words = []
         current_time = 0.1  # Start a bit after beginning
@@ -344,51 +344,51 @@ class ParakeetTDTModel(TranscriptionModel):
                 "conf": 0.9  # Default confidence
             })
             current_time += word_duration + 0.1  # Add small gap between words
-        
+
         return words
-    
+
     def transcribe(self, audio_path: Union[str, Path]) -> Optional[Dict]:
         """Transcribe audio file using Parakeet TDT."""
         if not self.initialized:
             logger.error("Model not initialized")
             return None
-        
+
         audio_path = Path(audio_path)
         if not audio_path.exists():
             logger.error(f"Audio file not found: {audio_path}")
             return None
-        
+
         # Wrap the entire transcription process in a try-except block
         try:
             import torch
             import nemo.collections.asr as nemo_asr
             transcription_start_time = time.time()
-            
+
             # Preprocess audio
             waveform = self._preprocess_audio(audio_path)
             if waveform is None:
                 return None
-            
+
             # Get audio duration
             with sf.SoundFile(audio_path) as f:
                 duration_sec = len(f) / f.samplerate
-            
+
             # Move to appropriate device
             waveform = waveform.to(torch.device(self.device))
-            
+
             # Ensure correct shape (batch, time) - remove any extra dimensions
             if len(waveform.shape) > 2:
                 # If shape is (1, 1, time), reshape to (1, time)
                 waveform = waveform.squeeze(1)
             logger.debug(f"Waveform shape after reshaping: {waveform.shape}")
-            
+
             # Run inference
             logger.info(f"Running inference on {audio_path}")
             with torch.no_grad():
                 # For CTC models, we need to provide the signal length
                 signal_length = torch.tensor([waveform.shape[1]], device=waveform.device)
                 logger.debug(f"Audio shape: {waveform.shape}, length: {signal_length}")
-                
+
                 # Use the appropriate method for the model type
                 try:
                     # Different models have different APIs, try the appropriate method
@@ -396,14 +396,14 @@ class ParakeetTDTModel(TranscriptionModel):
                     if self.model is None:
                         logger.error("Model is not initialized")
                         return None
-                        
+
                     # Skip the transcribe method and use direct forward pass instead
                     # This is more reliable for handling shape issues
                     logger.debug("Skipping transcribe method and using direct forward pass")
-                    
+
                     # Go straight to direct forward pass
                     logger.debug("Using direct forward pass")
-                    
+
                     # Double-check waveform shape before forward pass
                     logger.debug(f"Shape before forward pass: {waveform.shape}")
                     if waveform.dim() != 2 or waveform.shape[0] != 1:
@@ -412,28 +412,28 @@ class ParakeetTDTModel(TranscriptionModel):
                         if waveform.dim() == 3:
                             waveform = waveform.squeeze(1)
                             logger.debug(f"Removed channel dimension: {waveform.shape}")
-                            
+
                         # If still not 2D with batch size 1, reshape
                         if waveform.dim() != 2 or waveform.shape[0] != 1:
                             # Force reshape to [1, time]
                             total_elements = waveform.numel()
                             waveform = waveform.reshape(1, total_elements)
                             logger.debug(f"Forced reshape to: {waveform.shape}")
-                    
+
                     # Final verification
                     if waveform.dim() != 2 or waveform.shape[0] != 1:
                         logger.error(f"Failed to achieve correct shape: {waveform.shape}")
                         return None
-                        
+
                     # Calculate signal length after shape is fixed
                     signal_length = torch.tensor([waveform.shape[1]], device=waveform.device)
                     logger.debug(f"Signal length: {signal_length}, waveform shape: {waveform.shape}")
-                    
+
                     # Forward pass - only if model is not None
                     if self.model is None:
                         logger.error("Cannot perform direct forward pass: model is None")
                         return None
-                        
+
                     # Use try-except to catch any errors during forward pass and decoding
                     try:
                         with torch.inference_mode():
@@ -441,7 +441,7 @@ class ParakeetTDTModel(TranscriptionModel):
                                 input_signal=waveform,
                                 input_signal_length=signal_length
                             )
-                        
+
                         # Convert to text using the model's tokenizer or decoder
                         # Different models have different attributes for decoding
                         if hasattr(self.model, 'wer') and hasattr(self.model.wer, 'ctc_decoder_predictions_tensor'):
@@ -477,7 +477,7 @@ class ParakeetTDTModel(TranscriptionModel):
                         import traceback
                         logger.error(traceback.format_exc())
                         return None
-                    
+
                     logger.debug(f"Transcription output type: {type(hypotheses)}")
                     logger.debug(f"Transcription result: {hypotheses}")
                 except Exception as e:
@@ -485,7 +485,7 @@ class ParakeetTDTModel(TranscriptionModel):
                     import traceback
                     logger.error(traceback.format_exc())
                     return None
-            
+
             # Return the result from direct forward pass
             return self._process_transcription_result(hypotheses, audio_path, duration_sec, transcription_start_time)
         except Exception as e:
@@ -493,17 +493,17 @@ class ParakeetTDTModel(TranscriptionModel):
             import traceback
             logger.error(traceback.format_exc())
             return None
-    
-    def _process_transcription_result(self, hypotheses, audio_path: Path, duration_sec: float, 
+
+    def _process_transcription_result(self, hypotheses, audio_path: Path, duration_sec: float,
                                   start_time: Optional[float] = None) -> Optional[Dict]:
         """Process transcription result into a standardized format.
-        
+
         Args:
             hypotheses: Raw transcription output from the model
             audio_path: Path to the audio file
             duration_sec: Duration of the audio in seconds
             start_time: Optional start time for calculating elapsed time
-            
+
         Returns:
             Standardized transcription result dictionary or None on failure
         """
@@ -511,16 +511,16 @@ class ParakeetTDTModel(TranscriptionModel):
         if not hypotheses or len(hypotheses) == 0:
             logger.warning(f"No transcription result for {audio_path}")
             return None
-        
+
         # Extract text
         text = hypotheses[0].text if hasattr(hypotheses[0], 'text') else str(hypotheses[0])
-        
+
         # Calculate confidence if available
         confidence = getattr(hypotheses[0], 'confidence', 0.9) if hasattr(hypotheses[0], 'confidence') else 0.9
-        
+
         # Extract word timestamps if available
         words = self._extract_word_timestamps(hypotheses)
-        
+
         # Prepare result
         result = {
             "text": text.strip(),
@@ -530,12 +530,12 @@ class ParakeetTDTModel(TranscriptionModel):
             "model": self.model_name,
             "language": self.language
         }
-        
+
         elapsed_time = time.time() - start_time if start_time else 0
         logger.info(f"Transcription completed in {elapsed_time:.2f}s: {text[:50]}{'...' if len(text) > 50 else ''}")
-        
+
         return result
-    
+
     def cleanup(self) -> None:
         """Clean up resources."""
         logger.info("Cleaning up Parakeet TDT model")
@@ -548,10 +548,529 @@ class ParakeetTDTModel(TranscriptionModel):
         self.initialized = False
 
 
+class GraniteSpeechModel(TranscriptionModel):
+    """IBM Granite Speech model wrapper."""
+
+    def __init__(self, config: TranscriptionConfig):
+        """Initialize Granite Speech model."""
+        super().__init__(config)
+        self.model = None
+        self.processor = None
+        self.initialized = False
+        self.device = config.device
+        self.model_name = config.model_name
+        self.batch_size = config.batch_size
+        self.language = config.language
+        self.sample_rate = 16000  # Granite Speech expects 16kHz audio
+
+    def initialize(self) -> bool:
+        """Initialize the model."""
+        logger.info(f"Initializing Granite Speech model '{self.model_name}' on device {self.device}")
+
+        try:
+            # Import required libraries
+            import torch
+            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+            # Set device
+            if self.device.startswith('cuda') and not torch.cuda.is_available():
+                logger.warning("CUDA requested but not available, falling back to CPU")
+                self.device = 'cpu'
+
+            # Load the Granite Speech model and processor
+            logger.info(f"Loading model {self.model_name} on {self.device}")
+            try:
+                self.processor = AutoProcessor.from_pretrained(self.model_name)
+                self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float16 if self.device.startswith('cuda') else torch.float32,
+                    low_cpu_mem_usage=True,
+                    use_safetensors=True
+                )
+                self.model.to(torch.device(self.device))
+            except Exception as e:
+                raise ValueError(f"Failed to load model {self.model_name}: {e}")
+
+            # Set model to evaluation mode
+            self.model.eval()
+
+            # Get model metadata
+            self.model_metadata = {
+                "name": self.model_name,
+                "version": getattr(self.model.config, "version", "3.3"),
+                "type": self.model.__class__.__name__,
+                "device": self.device,
+                "language": self.language
+            }
+
+            logger.info(f"Granite Speech model loaded successfully: {self.model_metadata}")
+            self.initialized = True
+            return True
+        except ImportError as e:
+            logger.error(f"Failed to import required libraries: {e}. Make sure transformers is installed with 'pip install transformers'")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Granite Speech model: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    def _preprocess_audio(self, audio_path: Path) -> Optional[torch.Tensor]:
+        """Preprocess audio file for Granite Speech model."""
+        try:
+            import torch
+            import torchaudio
+
+            # Load audio file
+            logger.debug(f"Loading audio file: {audio_path}")
+
+            # Use torchaudio for loading
+            waveform, sample_rate = torchaudio.load(audio_path)
+            logger.debug(f"Original waveform shape: {waveform.shape}, sample_rate: {sample_rate}")
+
+            # Convert to mono if needed
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+                logger.debug(f"After mono conversion: {waveform.shape}")
+
+            # Resample if needed
+            if sample_rate != self.sample_rate:
+                logger.debug(f"Resampling from {sample_rate} to {self.sample_rate}")
+                resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
+                waveform = resampler(waveform)
+                logger.debug(f"After resampling: {waveform.shape}")
+
+            # Normalize audio (important for model performance)
+            waveform = waveform / (torch.max(torch.abs(waveform)) + 1e-8)  # Add small epsilon to avoid division by zero
+
+            # Ensure the shape is [1, time]
+            if waveform.dim() == 1:  # [time]
+                waveform = waveform.unsqueeze(0)  # Now [1, time]
+            elif waveform.dim() == 3:  # [batch, channels, time]
+                waveform = waveform.squeeze(1)  # Remove channel dimension to get [batch, time]
+
+            # Final verification
+            if waveform.dim() != 2 or waveform.shape[0] != 1:
+                logger.warning(f"Final shape check failed: {waveform.shape}, forcing correction...")
+                if waveform.dim() == 2 and waveform.shape[0] > 1:
+                    waveform = waveform[0].unsqueeze(0)  # Take first channel/batch
+                else:
+                    # Try to reshape completely
+                    total_elements = waveform.numel()
+                    waveform = waveform.reshape(1, total_elements)
+
+            logger.debug(f"Final waveform shape: {waveform.shape}")
+            return waveform
+        except Exception as e:
+            logger.error(f"Error preprocessing audio {audio_path}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def _extract_word_timestamps(self, result) -> list:
+        """Extract word-level timestamps from model output."""
+        try:
+            # Granite Speech model may provide word timestamps directly
+            if hasattr(result, "word_timestamps") and result.word_timestamps:
+                words = []
+                for word_info in result.word_timestamps:
+                    words.append({
+                        "w": word_info.word,
+                        "start": word_info.start_time,
+                        "end": word_info.end_time,
+                        "conf": word_info.confidence if hasattr(word_info, "confidence") else 0.9
+                    })
+                return words
+            else:
+                # Fall back to estimation based on text
+                return self._estimate_word_timestamps(result.text)
+        except Exception as e:
+            logger.error(f"Error extracting word timestamps: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+
+    def _estimate_word_timestamps(self, text: str) -> list:
+        """Estimate word timestamps based on character counts."""
+        if not text:
+            return []
+
+        # Simple estimation based on character count
+        words_list = text.split()
+        total_chars = sum(len(word) for word in words_list)
+
+        # Estimate duration based on average speaking rate
+        # Assuming ~5 characters per second as a rough estimate
+        estimated_duration = total_chars / 5.0
+
+        # Distribute words evenly across the estimated duration
+        words = []
+        current_time = 0.1  # Start a bit after beginning
+        for word in words_list:
+            word_duration = (len(word) / total_chars) * estimated_duration
+            words.append({
+                "w": word,
+                "start": round(current_time, 2),
+                "end": round(current_time + word_duration, 2),
+                "conf": 0.9  # Default confidence
+            })
+            current_time += word_duration + 0.1  # Add small gap between words
+
+        return words
+
+    def transcribe(self, audio_path: Union[str, Path]) -> Optional[Dict]:
+        """Transcribe audio file using Granite Speech."""
+        if not self.initialized:
+            logger.error("Model not initialized")
+            return None
+
+        audio_path = Path(audio_path)
+        if not audio_path.exists():
+            logger.error(f"Audio file not found: {audio_path}")
+            return None
+
+        # Wrap the entire transcription process in a try-except block
+        try:
+            import torch
+            transcription_start_time = time.time()
+
+            # Preprocess audio
+            waveform = self._preprocess_audio(audio_path)
+            if waveform is None:
+                return None
+
+            # Get audio duration
+            with sf.SoundFile(audio_path) as f:
+                duration_sec = len(f) / f.samplerate
+
+            # Move to appropriate device
+            waveform = waveform.to(torch.device(self.device))
+
+            # For Granite Speech, we need to create a text prompt
+            # Create text prompt
+            system_prompt = "You are a helpful AI assistant"
+            user_prompt = "<|audio|>Please transcribe the audio"
+            chat = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            prompt = self.processor.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+
+            # Process audio with the processor - this handles both text and audio
+            model_inputs = self.processor(prompt, waveform.squeeze(0).numpy(), device=self.device, return_tensors="pt").to(self.device)
+
+            # Run inference
+            logger.info(f"Running inference on {audio_path}")
+            with torch.no_grad():
+                # Generate transcription
+                outputs = self.model.generate(
+                    **model_inputs,
+                    max_length=256,
+                    num_beams=1,  # Use greedy decoding for speed
+                )
+
+                # Transformers includes the input IDs in the response, so we need to extract only the new tokens
+                num_input_tokens = model_inputs["input_ids"].shape[-1]
+                new_tokens = torch.unsqueeze(outputs[0, num_input_tokens:], dim=0)
+
+                # Decode the outputs
+                output_text = self.processor.tokenizer.batch_decode(
+                    new_tokens,
+                    add_special_tokens=False,
+                    skip_special_tokens=True
+                )
+
+                # Extract the transcription
+                transcription = output_text[0]
+
+                # Process result
+                result = {
+                    "text": transcription.strip(),
+                    "confidence": 0.9,  # Default confidence as Granite may not provide token-level confidence
+                    "words": self._estimate_word_timestamps(transcription),
+                    "duration": duration_sec,
+                    "model": self.model_name,
+                    "language": self.language
+                }
+
+                elapsed_time = time.time() - transcription_start_time
+                logger.info(f"Transcription completed in {elapsed_time:.2f}s: {transcription[:50]}{'...' if len(transcription) > 50 else ''}")
+
+                return result
+        except Exception as e:
+            logger.error(f"Error in transcription: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def cleanup(self) -> None:
+        """Clean up resources."""
+        logger.info("Cleaning up Granite Speech model")
+        if self.model is not None:
+            # Release CUDA memory if using GPU
+            if self.device.startswith('cuda'):
+                import torch
+                torch.cuda.empty_cache()
+        self.model = None
+        self.processor = None
+        self.initialized = False
+
+
+class WhisperModel(TranscriptionModel):
+    """OpenAI Whisper model wrapper."""
+
+    def __init__(self, config: TranscriptionConfig):
+        """Initialize Whisper model."""
+        super().__init__(config)
+        self.model = None
+        self.processor = None
+        self.initialized = False
+        self.device = config.device
+        self.model_name = config.model_name
+        self.batch_size = config.batch_size
+        self.language = config.language
+        self.sample_rate = 16000  # Whisper expects 16kHz audio
+
+    def initialize(self) -> bool:
+        """Initialize the model."""
+        logger.info(f"Initializing Whisper model '{self.model_name}' on device {self.device}")
+
+        try:
+            # Import required libraries
+            import torch
+            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+            # Set device
+            if self.device.startswith('cuda') and not torch.cuda.is_available():
+                logger.warning("CUDA requested but not available, falling back to CPU")
+                self.device = 'cpu'
+
+            # Load the Whisper model and processor
+            logger.info(f"Loading model {self.model_name} on {self.device}")
+            try:
+                self.processor = AutoProcessor.from_pretrained(self.model_name)
+                self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float16 if self.device.startswith('cuda') else torch.float32,
+                    low_cpu_mem_usage=True,
+                    use_safetensors=True
+                )
+                self.model.to(torch.device(self.device))
+            except Exception as e:
+                raise ValueError(f"Failed to load model {self.model_name}: {e}")
+
+            # Set model to evaluation mode
+            self.model.eval()
+
+            # Get model metadata
+            self.model_metadata = {
+                "name": self.model_name,
+                "version": getattr(self.model.config, "version", "unknown"),
+                "type": self.model.__class__.__name__,
+                "device": self.device,
+                "language": self.language
+            }
+
+            logger.info(f"Whisper model loaded successfully: {self.model_metadata}")
+            self.initialized = True
+            return True
+        except ImportError as e:
+            logger.error(f"Failed to import required libraries: {e}. Make sure transformers is installed with 'pip install transformers'")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Whisper model: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    def _preprocess_audio(self, audio_path: Path) -> Optional[torch.Tensor]:
+        """Preprocess audio file for Whisper model."""
+        try:
+            import torch
+            import torchaudio
+
+            # Load audio file
+            logger.debug(f"Loading audio file: {audio_path}")
+
+            # Use torchaudio for loading
+            waveform, sample_rate = torchaudio.load(audio_path)
+            logger.debug(f"Original waveform shape: {waveform.shape}, sample_rate: {sample_rate}")
+
+            # Convert to mono if needed
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+                logger.debug(f"After mono conversion: {waveform.shape}")
+
+            # Resample if needed
+            if sample_rate != self.sample_rate:
+                logger.debug(f"Resampling from {sample_rate} to {self.sample_rate}")
+                resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
+                waveform = resampler(waveform)
+                logger.debug(f"After resampling: {waveform.shape}")
+
+            # Normalize audio (important for model performance)
+            waveform = waveform / (torch.max(torch.abs(waveform)) + 1e-8)  # Add small epsilon to avoid division by zero
+
+            # Ensure the shape is [1, time]
+            if waveform.dim() == 1:  # [time]
+                waveform = waveform.unsqueeze(0)  # Now [1, time]
+            elif waveform.dim() == 3:  # [batch, channels, time]
+                waveform = waveform.squeeze(1)  # Remove channel dimension to get [batch, time]
+
+            # Final verification
+            if waveform.dim() != 2 or waveform.shape[0] != 1:
+                logger.warning(f"Final shape check failed: {waveform.shape}, forcing correction...")
+                if waveform.dim() == 2 and waveform.shape[0] > 1:
+                    waveform = waveform[0].unsqueeze(0)  # Take first channel/batch
+                else:
+                    # Try to reshape completely
+                    total_elements = waveform.numel()
+                    waveform = waveform.reshape(1, total_elements)
+
+            logger.debug(f"Final waveform shape: {waveform.shape}")
+            return waveform
+        except Exception as e:
+            logger.error(f"Error preprocessing audio {audio_path}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def _extract_word_timestamps(self, result) -> list:
+        """Extract word-level timestamps from model output."""
+        try:
+            # Whisper doesn't provide word timestamps by default
+            # We'll estimate them based on the text
+            if hasattr(result, "text"):
+                text = result.text
+            else:
+                text = str(result)
+
+            return self._estimate_word_timestamps(text)
+        except Exception as e:
+            logger.error(f"Error extracting word timestamps: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+
+    def _estimate_word_timestamps(self, text: str) -> list:
+        """Estimate word timestamps based on character counts."""
+        if not text:
+            return []
+
+        # Simple estimation based on character count
+        words_list = text.split()
+        total_chars = sum(len(word) for word in words_list)
+
+        # Estimate duration based on average speaking rate
+        # Assuming ~5 characters per second as a rough estimate
+        estimated_duration = total_chars / 5.0
+
+        # Distribute words evenly across the estimated duration
+        words = []
+        current_time = 0.1  # Start a bit after beginning
+        for word in words_list:
+            word_duration = (len(word) / total_chars) * estimated_duration
+            words.append({
+                "w": word,
+                "start": round(current_time, 2),
+                "end": round(current_time + word_duration, 2),
+                "conf": 0.9  # Default confidence
+            })
+            current_time += word_duration + 0.1  # Add small gap between words
+
+        return words
+
+    def transcribe(self, audio_path: Union[str, Path]) -> Optional[Dict]:
+        """Transcribe audio file using Whisper."""
+        if not self.initialized:
+            logger.error("Model not initialized")
+            return None
+
+        audio_path = Path(audio_path)
+        if not audio_path.exists():
+            logger.error(f"Audio file not found: {audio_path}")
+            return None
+
+        # Wrap the entire transcription process in a try-except block
+        try:
+            import torch
+            transcription_start_time = time.time()
+
+            # Preprocess audio
+            waveform = self._preprocess_audio(audio_path)
+            if waveform is None:
+                return None
+
+            # Get audio duration
+            with sf.SoundFile(audio_path) as f:
+                duration_sec = len(f) / f.samplerate
+
+            # Process audio with the processor
+            inputs = self.processor(waveform.squeeze(0).numpy(), sampling_rate=self.sample_rate, return_tensors="pt")
+
+            # Ensure consistent tensor types by converting to the same dtype as the model
+            dtype = torch.float16 if self.device.startswith('cuda') else torch.float32
+            inputs = {k: v.to(device=self.device, dtype=dtype if k == "input_features" else None) for k, v in inputs.items()}
+
+            # Run inference
+            logger.info(f"Running inference on {audio_path}")
+            with torch.no_grad():
+                # Generate transcription
+                forced_decoder_ids = None
+                if self.language != "auto":
+                    # Set language if specified
+                    forced_decoder_ids = self.processor.get_decoder_prompt_ids(
+                        language=self.language.split("-")[0],  # Extract primary language code (e.g., "en" from "en-US")
+                        task="transcribe"
+                    )
+
+                outputs = self.model.generate(
+                    **inputs,
+                    max_length=256,
+                    forced_decoder_ids=forced_decoder_ids,
+                    num_beams=1  # Use greedy decoding for speed
+                )
+
+                # Decode the outputs
+                transcription = self.processor.batch_decode(outputs, skip_special_tokens=True)[0]
+
+                # Process result
+                result = {
+                    "text": transcription.strip(),
+                    "confidence": 0.9,  # Default confidence as Whisper doesn't provide token-level confidence
+                    "words": self._estimate_word_timestamps(transcription),
+                    "duration": duration_sec,
+                    "model": self.model_name,
+                    "language": self.language
+                }
+
+                elapsed_time = time.time() - transcription_start_time
+                logger.info(f"Transcription completed in {elapsed_time:.2f}s: {transcription[:50]}{'...' if len(transcription) > 50 else ''}")
+
+                return result
+        except Exception as e:
+            logger.error(f"Error in transcription: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def cleanup(self) -> None:
+        """Clean up resources."""
+        logger.info("Cleaning up Whisper model")
+        if self.model is not None:
+            # Release CUDA memory if using GPU
+            if self.device.startswith('cuda'):
+                import torch
+                torch.cuda.empty_cache()
+        self.model = None
+        self.processor = None
+        self.initialized = False
+
+
 def create_transcription_model(config: TranscriptionConfig) -> TranscriptionModel:
     """Factory function to create a transcription model based on configuration."""
     engine = config.engine.lower()
-    
+
     if engine == "nemo_parakeet_tdt":
         # Check if we can import nemo
         try:
@@ -561,6 +1080,26 @@ def create_transcription_model(config: TranscriptionConfig) -> TranscriptionMode
         except ImportError:
             logger.warning("NeMo not available, falling back to dummy model")
             logger.warning("To use Parakeet TDT, install NeMo with: pip install nemo_toolkit[asr]")
+            return DummyTranscriptionModel(config)
+    elif engine == "granite_speech":
+        # Check if we can import transformers
+        try:
+            import transformers
+            logger.info("Transformers is available, using Granite Speech model")
+            return GraniteSpeechModel(config)
+        except ImportError:
+            logger.warning("Transformers not available, falling back to dummy model")
+            logger.warning("To use Granite Speech, install transformers with: pip install transformers")
+            return DummyTranscriptionModel(config)
+    elif engine == "whisper":
+        # Check if we can import transformers
+        try:
+            import transformers
+            logger.info("Transformers is available, using Whisper model")
+            return WhisperModel(config)
+        except ImportError:
+            logger.warning("Transformers not available, falling back to dummy model")
+            logger.warning("To use Whisper, install transformers with: pip install transformers")
             return DummyTranscriptionModel(config)
     elif engine == "dummy":
         logger.info("Using dummy transcription model")

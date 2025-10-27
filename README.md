@@ -49,17 +49,17 @@ In production, components are distributed:
    ```bash
    # Install from requirements.txt
    pip install -r requirements.txt
-   
+
    # Or install package
    pip install -e .
-   
+
    # With transcription support
    pip install -e ".[transcribe]"
-   
+
    # With development tools
    pip install -e ".[dev]"
    ```
-   
+
    Note: For Parakeet TDT support, you need to install NeMo with ASR support:
    ```bash
    pip install nemo_toolkit[asr]
@@ -206,6 +206,17 @@ pytest
 black lauschomat
 isort lauschomat
 ```
+
+### Removing Trailing Whitespace
+
+To remove trailing whitespace from all files tracked by git in the repository:
+
+```bash
+# Run the script from the repository root
+python examples/remove_trailing_whitespace.py
+```
+
+This script will scan all git-tracked files and remove any trailing whitespace, reporting which files were modified.
 
 ## License
 

@@ -32,12 +32,18 @@ recording:
 
 transcription:
   enabled: true
-  engine: nemo_parakeet_tdt
-  model_name: nvidia/parakeet-ctc-1.1b
+  # Available engines: whisper, granite_speech, nemo_parakeet_tdt, dummy
+  engine: whisper
+  # For whisper, use: openai/whisper-large-v3
+  # For granite_speech, use: ibm-granite/granite-speech-3.3-2b (lower memory) or ibm-granite/granite-speech-3.3-8b (higher accuracy)
+  # For nemo_parakeet_tdt, use: nvidia/parakeet-ctc-1.1b
+  model_name: openai/whisper-large-v3
   device: cuda:0            # Falls back to CPU if GPU unavailable
   batch_size: 1
   language: en-US
   diarization: false
+  # Whisper Large V3 has good performance in noisy environments with proper capitalization and punctuation
+  # Granite Speech has good performance in noisy environments with a different style (lowercase, minimal punctuation)
 
 web:
   enabled: true
