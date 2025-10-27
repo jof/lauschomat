@@ -1,13 +1,13 @@
 # Lauschomat: Realtime Radio Transcription System
 
-Lauschomat is a Linux-based application that listens to a radio receiver, detects signal activity (squelch), records transmissions, and transcribes them using NVIDIA Parakeet TDT. It includes a web interface for visualizing the recordings and transcriptions.
+Lauschomat is a Linux-based application that listens to a radio receiver, detects signal activity (squelch), records transmissions, and transcribes them using multiple speech-to-text engines (Whisper, Granite Speech, or Parakeet TDT). It includes a web interface for visualizing the recordings and transcriptions.
 
 ## Features
 
 - **Audio Capture**: Listens on a configurable audio device connected to a radio receiver
 - **Squelch Detection**: Performs signal edge detection to identify transmissions
 - **Recording**: Captures audio recordings of each transmission with configurable pre/post-roll
-- **Transcription**: Processes audio through NVIDIA Parakeet TDT for speech-to-text
+- **Transcription**: Processes audio through multiple supported speech-to-text engines (Whisper, Granite Speech, Parakeet TDT)
 - **Storage**: Logs audio and transcribed text to configurable filesystem locations
 - **Web Interface**: Visualizes recordings with audio playback and transcription display
 - **Development Mode**: Combined capture and processing on a single machine for easier development
@@ -35,13 +35,16 @@ In production, components are distributed:
 - Python 3.10+
 - PulseAudio
 - NVIDIA GPU with CUDA (for transcription)
-- NVIDIA NeMo toolkit with Parakeet TDT model
+- Speech recognition models (one of the following):
+  - OpenAI Whisper (recommended for noisy environments)
+  - IBM Granite Speech
+  - NVIDIA NeMo toolkit with Parakeet TDT model
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/lauschomat.git
+   git clone https://github.com/jof/lauschomat.git
    cd lauschomat
    ```
 
@@ -60,8 +63,15 @@ In production, components are distributed:
    pip install -e ".[dev]"
    ```
 
-   Note: For Parakeet TDT support, you need to install NeMo with ASR support:
+   Note: For transcription support, install the appropriate dependencies based on your chosen engine:
    ```bash
+   # For Whisper (recommended for noisy environments)
+   pip install transformers accelerate safetensors
+   
+   # For Granite Speech
+   pip install transformers accelerate safetensors sentencepiece
+   
+   # For Parakeet TDT
    pip install nemo_toolkit[asr]
    ```
 
@@ -119,29 +129,56 @@ lauschomat-web --config /path/to/web_config.yaml
 
 ## Configuration
 
-### Parakeet TDT Model
+### Transcription Engines
 
-The system uses NVIDIA's Parakeet TDT (Text-Dependent Transcription) model via the NeMo toolkit. Configure it in your config file:
+The system supports multiple speech-to-text engines that can be configured in your config file:
 
 ```yaml
 transcription:
   enabled: true
-  engine: nemo_parakeet_tdt
-  model_name: nvidia/parakeet-ctc-1.1b  # Or path to a .nemo file
-  device: cuda:0                      # Use 'cpu' if no GPU available
+  # Available engines: whisper, granite_speech, nemo_parakeet_tdt, dummy
+  engine: whisper
+  # For whisper, use: openai/whisper-large-v3
+  # For granite_speech, use: ibm-granite/granite-speech-3.3-2b (lower memory) or ibm-granite/granite-speech-3.3-8b (higher accuracy)
+  # For nemo_parakeet_tdt, use: nvidia/parakeet-ctc-1.1b
+  model_name: openai/whisper-large-v3
+  device: cuda:0            # Falls back to CPU if GPU unavailable
   batch_size: 1
   language: en-US
-  diarization: false                  # Usually single-speaker for radio
+  diarization: false        # Usually single-speaker for radio
 ```
 
-Supported model options:
-- Use a pretrained model name from NeMo's model catalog
-- Specify a path to a downloaded .nemo file
+#### Supported Engines
 
-The implementation automatically handles:
+1. **Whisper Large V3** (Recommended for noisy environments)
+   - High accuracy in noisy conditions
+   - Excellent multilingual support
+   - Good noise resilience
+   - Moderate model size (1.5B parameters)
+
+2. **Granite Speech 3.3**
+   - High accuracy in noisy conditions
+   - Excellent noise resilience
+   - Available in 2B (memory-efficient) and 8B (higher accuracy) versions
+   - Requires Hugging Face authentication
+
+3. **Parakeet TDT**
+   - Fast processing
+   - Moderate accuracy
+   - Smaller model size (0.6B parameters)
+
+All implementations automatically handle:
 - Audio preprocessing (resampling, normalization)
-- Word-level timestamp extraction
+- Word-level timestamp extraction (native or estimated)
 - Graceful fallback to CPU if GPU is unavailable
+
+#### Hardware Requirements
+
+- **Whisper Large V3**: Requires at least 8GB VRAM for GPU acceleration, or 16GB RAM for CPU-only
+- **Granite Speech 3.3**: 
+  - 2B version: Requires at least 8GB VRAM for GPU acceleration, or 16GB RAM for CPU-only
+  - 8B version: Requires at least 16GB VRAM for GPU acceleration, or 32GB RAM for CPU-only
+- **Parakeet TDT**: Requires at least 4GB VRAM for GPU acceleration, or 8GB RAM for CPU-only
 
 ### Audio Capture
 
@@ -164,11 +201,17 @@ The implementation automatically handles:
 
 ### Transcription
 
-- **Model**: NVIDIA Parakeet TDT via NeMo
+- **Models**: Multiple supported engines:
+  - OpenAI Whisper Large V3 (recommended for noisy environments)
+  - IBM Granite Speech 3.3
+  - NVIDIA Parakeet TDT via NeMo
 - **Device**: CUDA GPU (configurable, falls back to CPU if GPU unavailable)
 - **Output**: JSON with text, confidence, and word timings
 - **Word Timestamps**: Automatic extraction of word-level timing information
-- **Performance**: Sub-second latency for short transmissions on modern GPUs
+- **Performance**: Processing time varies by model:
+  - Whisper: ~5 seconds for short transmissions (CPU), faster on GPU
+  - Granite Speech: ~7 seconds for short transmissions (CPU), faster on GPU
+  - Parakeet TDT: Sub-second latency for short transmissions on modern GPUs
 
 ### Web Interface
 
